@@ -10,6 +10,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# ✅ Check and print the API key
+# Force load the .env from the same directory as main.py
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(dotenv_path, override=True)
+print("Loaded API Key (forced):", os.getenv("OPENROUTER_API_KEY"))
+
 app = FastAPI()
 
 # Enable CORS for local testing
@@ -33,7 +39,12 @@ def serve_home(request: Request):
 @app.post("/chat/stream")
 async def stream_chat(request: Request):
     data = await request.json()
-    conversation = data.get("conversation", [])
+
+    # handle both list or dict input
+    if isinstance(data, list):
+        conversation = data
+    else:
+        conversation = data.get("conversation", [])
 
     # Make sure the API key exists
     api_key = os.getenv("OPENROUTER_API_KEY")

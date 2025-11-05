@@ -1,47 +1,47 @@
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f2f2f2;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-}
-
-.container {
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    width: 400px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
 .chat-box {
-    height: 300px;
+    height: 400px;
     overflow-y: auto;
     border: 1px solid #ccc;
-    border-radius: 6px;
+    border-radius: 10px;
     padding: 10px;
     margin-bottom: 10px;
-}
-
-.chat-form {
+    background-color: #f8f9fa;
     display: flex;
+    flex-direction: column;
 }
 
-.chat-form input {
-    flex: 1;
-    padding: 8px;
-    border-radius: 6px;
-    border: 1px solid #aaa;
-    outline: none;
+/* General message bubble */
+.message {
+    max-width: 75%;
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 12px;
+    word-wrap: break-word;
+    line-height: 1.4;
 }
 
-.chat-form button {
-    padding: 8px 12px;
-    margin-left: 5px;
-    border: none;
+/* User message (right side, blue) */
+.message.user {
+    align-self: flex-end;
     background-color: #0078ff;
     color: white;
-    border-radius: 6px;
-    cursor: pointer;
+    border-bottom-right-radius: 2px;
+}
+
+/* Assistant message (left side, gray) */
+.message.assistant {
+    align-self: flex-start;
+    background-color: #e9ecef;
+    color: #333;
+    border-bottom-left-radius: 2px;
+}
+
+/* Scrollbar look (optional) */
+.chat-box::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-box::-webkit-scrollbar-thumb {
+    background-color: #aaa;
+    border-radius: 3px;
 }
