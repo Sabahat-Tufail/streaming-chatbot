@@ -34,13 +34,13 @@ async function sendMessage(event) {
     renderChat();
     userInput.value = "";
 
-    // Add empty assistant message container
+    // Assistant placeholder
     const assistantDiv = document.createElement("div");
     assistantDiv.classList.add("message", "assistant");
+    assistantDiv.textContent = "";
     chatBox.appendChild(assistantDiv);
 
     try {
-        // Send POST request to backend
         const response = await fetch("http://127.0.0.1:8000/chat/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -48,11 +48,10 @@ async function sendMessage(event) {
         });
 
         if (!response.ok) {
-            assistantDiv.textContent = "[Error: " + response.status + "]";
+            assistantDiv.textContent = `[Error: ${response.status}]`;
             return;
         }
 
-        // Handle streaming response
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let assistantText = "";
@@ -60,32 +59,34 @@ async function sendMessage(event) {
         while (true) {
             const { value, done } = await reader.read();
             if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
 
-            // Split into lines and process each 'data:' line
-            const lines = chunk.split("\n").filter(line => line.trim().startsWith("data:"));
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n").filter(line => line.startsWith("data: "));
+
             for (const line of lines) {
                 const data = line.replace("data: ", "").trim();
-                if (data === "[DONE]") break;
+                if (data === "[DONE]") continue;
 
                 try {
                     const json = JSON.parse(data);
                     const delta = json.choices?.[0]?.delta?.content || "";
-                    assistantText += delta;
-                    assistantDiv.textContent = assistantText;
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                } catch (e) {
-                    console.warn("Skipping invalid chunk:", data);
+                    if (delta) {
+                        assistantText += delta;
+                        assistantDiv.textContent = assistantText;
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    }
+                } catch {
+                    // ignore partial JSON chunks
                 }
             }
         }
 
-        // Save assistant's complete response
+        // Save final assistant message
         conversation.push({ role: "assistant", content: assistantText });
         saveChat();
         renderChat();
     } catch (err) {
-        console.error("Error:", err);
+        console.error("Network Error:", err);
         assistantDiv.textContent = "[Network error]";
     }
 }
