@@ -3,16 +3,15 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import os, json
+import os, json, requests
 from dotenv import load_dotenv
 from langfuse import Langfuse
-from groq import Groq
 
 # ------------------ ENV SETUP ------------------
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path, override=True)
 
-print("Loaded Groq Key:", os.getenv("GROQ_API_KEY"))
+print("Loaded OpenRouter Key:", os.getenv("OPENROUTER_API_KEY"))
 print("Loaded Langfuse Public Key:", os.getenv("LANGFUSE_PUBLIC_KEY"))
 
 app = FastAPI()
@@ -30,19 +29,23 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# ------------------ Langfuse ------------------
+# ------------------ Langfuse (OLD VERSION) ------------------
 langfuse = Langfuse(
     public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
     secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
     host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 )
 
-# ------------------ Groq Client ------------------
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise Exception("Please set GROQ_API_KEY in environment variables")
+# ------------------ OpenRouter Setup ------------------
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+if not OPENROUTER_API_KEY:
+    raise Exception("Please set OPENROUTER_API_KEY in environment variables")
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+HEADERS = {
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json",
+}
 
 # ------------------ Routes ------------------
 @app.get("/", response_class=HTMLResponse)
@@ -58,10 +61,11 @@ async def stream_chat(request: Request):
     if not conversation:
         return {"error": "Empty conversation"}
 
+    # Langfuse trace ID
     trace_id = langfuse.create_trace_id()
     print(f"Langfuse trace started: {trace_id}")
 
-    # Use only the latest valid user message
+    # Extract user input
     user_input = ""
     for msg in reversed(conversation):
         if msg.get("role") == "user" and msg.get("content"):
@@ -71,30 +75,52 @@ async def stream_chat(request: Request):
     if not user_input:
         return {"error": "No valid user message found"}
 
-    # ------------------ Streaming Generator ------------------
+    # ------------------ Streaming ------------------
     def event_stream():
         collected_output = ""
         try:
-            # Groq chat completion (non-blocking, simple streaming)
-            response = groq_client.chat.completions.create(
-                messages=[
+            payload = {
+                "model": "meta-llama/llama-3.1-70b-instruct",
+                "messages": [
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": user_input}
                 ],
-                model="llama‑3.3‑70b‑versatile",
-                stream=True
-            )
+                "max_tokens": 200,
+                "stream": True,
+            }
 
-            for chunk in response:
-                if hasattr(chunk, "choices"):
-                    text_chunk = chunk.choices[0].delta.get("content", "")
-                    if text_chunk:
-                        collected_output += text_chunk
-                        yield f"data: {json.dumps({'content': text_chunk})}\n\n"
+            print("\n--- Sending request to OpenRouter ---")
+            print("User Input:", user_input)
+            print("------------------------------------\n")
 
-            yield "data: [DONE]\n\n"
+            with requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, stream=True) as r:
+                for line in r.iter_lines():
+                    if line:
+                        decoded_line = line.decode("utf-8")
+
+                        # --- DEBUG PRINT ---
+                        print(f"🧠 Model Stream Chunk: {decoded_line}")
+
+                        # If you only want the text part
+                        if decoded_line.startswith("data:"):
+                            data_str = decoded_line[len("data:"):].strip()
+                            if data_str == "[DONE]":
+                                print("\n✅ [DONE] Model finished generating.\n")
+                                yield "data: [DONE]\n\n"
+                                break
+                            try:
+                                json_data = json.loads(data_str)
+                                text = json_data["choices"][0]["delta"].get("content", "")
+                                if text:
+                                    collected_output += text
+                                    print("➡️ Model Output:", text, end="", flush=True)
+                                    yield f"data: {json.dumps({'content': text})}\n\n"
+                            except Exception as e:
+                                print(f"\n⚠️ JSON parse error: {e}")
+                                continue
 
         except Exception as e:
+            print(f"\n❌ Error during streaming: {e}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
         finally:
             print("\n--- Langfuse Trace Log ---")
