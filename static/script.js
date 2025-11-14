@@ -1,6 +1,13 @@
 // ----- State -----
 let conversation = JSON.parse(localStorage.getItem("chatHistory") || "[]");
 
+// Generate or reuse session ID per browser
+let sessionId = localStorage.getItem("sessionId");
+if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    localStorage.setItem("sessionId", sessionId);
+}
+
 const chatBox = document.getElementById("chat");
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
@@ -44,8 +51,11 @@ async function sendMessage(event) {
     try {
         const response = await fetch("http://127.0.0.1:8000/chat/stream", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ conversation }),
+            headers: {
+                "Content-Type": "application/json",
+                "x-session-id": sessionId
+            },
+            body: JSON.stringify({ conversation })
         });
 
         if (!response.ok) {
@@ -93,9 +103,24 @@ async function sendMessage(event) {
 }
 
 // ----- Clear Chat -----
-clearChat.addEventListener("click", () => {
+clearChat.addEventListener("click", async () => {
     if (confirm("Are you sure you want to delete this conversation?")) {
         localStorage.removeItem("chatHistory");
+
+        // Reset trace on backend
+        try {
+            await fetch("http://127.0.0.1:8000/chat/stream?reset=true", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-session-id": sessionId
+                },
+                body: JSON.stringify({ conversation: [] })
+            });
+        } catch {
+            // ignore
+        }
+
         location.reload();
     }
 });
