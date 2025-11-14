@@ -49,6 +49,8 @@ async function sendMessage(event) {
     chatBox.appendChild(assistantDiv);
 
     try {
+        console.log("Sending conversation:", conversation);
+
         const response = await fetch("http://127.0.0.1:8000/chat/stream", {
             method: "POST",
             headers: {
@@ -57,6 +59,7 @@ async function sendMessage(event) {
             },
             body: JSON.stringify({ conversation })
         });
+
 
         if (!response.ok) {
             assistantDiv.textContent = `[Error: ${response.status}]`;
