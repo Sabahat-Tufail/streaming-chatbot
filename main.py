@@ -52,7 +52,7 @@ def health_check():
 async def stream_chat(
     request: Request, 
     x_session_id: str = Header(None),
-    x_api_key: str = Header(None),       # <-- API key header from frontend
+    x_api_key: str = Header(None),  # <-- API key header from frontend
     reset: bool = False
 ):
     # ---------- Security ----------
@@ -79,8 +79,15 @@ async def stream_chat(
         session_traces[session_id] = trace_id
 
     # ---------- System prompt ----------
-    system_prompt = langfuse.get_prompt("system/default")
-    system_content = getattr(system_prompt, "text", "You are a helpful assistant.")
+    system_content = "You are a helpful assistant."  # default
+    try:
+        system_prompt = langfuse.get_prompt("system/default")
+        if system_prompt and hasattr(system_prompt, "text"):
+            system_content = system_prompt.text
+    except Exception as e:
+        print(f"Error getting system prompt: {e}")
+
+    # ---------- Prepare messages ----------
     messages = [{"role": "system", "content": system_content}]
     messages.extend(conversation)
 
