@@ -55,7 +55,9 @@ async function sendMessage(event) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "x-session-id": sessionId
+                "x-session-id": sessionId,
+                "x-api-key": "mysecret123"
+
             },
             body: JSON.stringify({ conversation })
         });
