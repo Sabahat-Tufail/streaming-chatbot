@@ -6,14 +6,10 @@ from dotenv import load_dotenv
 from langfuse import Langfuse
 
 # ---------------- ENV ----------------
-#load_dotenv()  # No need to override if .env is in the same folder
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path, override=True)
-api_key = os.getenv("API_KEY")
 
-print("OPENROUTER_API_KEY:", os.getenv("OPENROUTER_API_KEY"))
-
-
+API_KEY = os.getenv("API_KEY")                 # Your custom API key for frontend/backend auth
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -53,10 +49,16 @@ def health_check():
 
 # ---------------- Chat Route ----------------
 @app.post("/chat/stream")
-async def stream_chat(request: Request, x_session_id: str = Header(None), reset: bool = False):
-    if api_key != os.getenv("API_KEY"):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-       
+async def stream_chat(
+    request: Request, 
+    x_session_id: str = Header(None),
+    x_api_key: str = Header(None),       # <-- API key header from frontend
+    reset: bool = False
+):
+    # ---------- Security ----------
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid API Key")
+
     if not x_session_id:
         raise HTTPException(status_code=400, detail="Missing session ID")
     
@@ -64,27 +66,25 @@ async def stream_chat(request: Request, x_session_id: str = Header(None), reset:
     if reset:
         session_traces.pop(session_id, None)
 
-    # Get conversation from frontend
+    # ---------- Get conversation ----------
     data = await request.json()
     conversation = data.get("conversation", [])
     if not conversation and not reset:
         return JSONResponse({"error": "Empty conversation"})
 
-    # Langfuse trace management
+    # ---------- Langfuse trace management ----------
     trace_id = session_traces.get(session_id)
     if not trace_id:
         trace_id = langfuse.create_trace_id()
         session_traces[session_id] = trace_id
 
-    # System prompt
+    # ---------- System prompt ----------
     system_prompt = langfuse.get_prompt("system/default")
     system_content = getattr(system_prompt, "text", "You are a helpful assistant.")
-
-    # Include full conversation (system + all user/assistant messages)
     messages = [{"role": "system", "content": system_content}]
     messages.extend(conversation)
 
-    # Streaming response
+    # ---------- Streaming response ----------
     def event_stream():
         collected_output = ""
         try:
@@ -97,7 +97,6 @@ async def stream_chat(request: Request, x_session_id: str = Header(None), reset:
 
             with requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, stream=True) as r:
                 if r.status_code != 200:
-                    print("OpenRouter error:", r.status_code, r.text)
                     yield f"data: {json.dumps({'content': '[Error: API request failed]'})}\n\n"
                     return
 
@@ -118,11 +117,11 @@ async def stream_chat(request: Request, x_session_id: str = Header(None), reset:
                                 yield f"data: {json.dumps({'content': text})}\n\n"
                         except Exception:
                             continue
-        except Exception as e:
+        except Exception:
             yield f"data: {json.dumps({'content': '[Error: Streaming failed]'})}\n\n"
         finally:
             print(f"Trace ID: {trace_id}")
-            print(f"Full conversation length: {len(conversation)}")
+            print(f"Conversation length: {len(conversation)}")
             print(f"Preview output: {collected_output[:200]}")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
