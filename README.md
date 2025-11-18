@@ -1,7 +1,3 @@
-Got it! I can update your README to include **API key authentication** clearly, showing how the key should be set in `.env` and used by the frontend. Here's the updated version with all references to API key added and proper instructions for local testing:
-
----
-
 # FastAPI Chatbot
 
 This repository provides a **real-time streaming chatbot** using **FastAPI** for the backend and a simple **HTML/CSS/JS frontend**. The AI backend uses **OpenRouter AI** (`gpt-3.5-turbo`) and **Langfuse** for trace management and session-based conversation tracking.
